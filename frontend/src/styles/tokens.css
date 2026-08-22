@@ -1,0 +1,77 @@
+:root {
+  /* Color: a clinical, low-glare palette. Deep ink-teal for trust/focus,
+     warm paper background (not stark white — easier on eyes over long review sessions),
+     a single restrained signal color (amber) reserved only for status/attention. */
+  --ink-900: #0f2c2e;
+  --ink-700: #1f4548;
+  --teal-600: #2f6e6b;
+  --teal-500: #3d8985;
+  --paper-100: #faf8f4;
+  --paper-200: #f1ede4;
+  --line-200: #e2ddd0;
+  --line-300: #cfc8b8;
+  --amber-500: #b8863b;
+  --amber-100: #f4e9d6;
+  --red-500: #a8402f;
+  --red-100: #f5e1dc;
+  --green-600: #3e7a52;
+  --green-100: #e2ede3;
+  --text-900: #1c1c1a;
+  --text-600: #5b5952;
+  --text-400: #8a8778;
+
+  --font-display: "Fraunces", "Iowan Old Style", serif;
+  --font-body: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --shadow-card: 0 1px 2px rgba(15, 44, 46, 0.06), 0 4px 16px rgba(15, 44, 46, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--paper-100);
+  color: var(--text-900);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  color: var(--ink-900);
+  font-weight: 600;
+  margin: 0;
+}
+
+button {
+  font-family: var(--font-body);
+}
+
+a {
+  color: var(--teal-600);
+}
+
+:focus-visible {
+  outline: 2px solid var(--teal-500);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
