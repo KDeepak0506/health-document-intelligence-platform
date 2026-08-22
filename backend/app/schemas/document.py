@@ -13,6 +13,7 @@ class DocumentProcessingStatus(str, Enum):
 class DocumentResponse(BaseModel):
     document_id: UUID
     patient_id: UUID | None
+    uploaded_by: UUID
     file_name: str
     file_type: str
     file_url: str

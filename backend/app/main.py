@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 
 from app.db.session import engine
-from app.routers import document
+from app.routers import auth, document
 
 
 app = FastAPI(
@@ -23,6 +23,11 @@ def database_health_check():
 
     return {"database": "ok"}
 
+
+app.include_router(
+    auth.router,
+    prefix="/api/v1",
+)
 
 app.include_router(
     document.router,
