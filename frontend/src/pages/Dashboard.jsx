@@ -9,7 +9,7 @@ const POLL_INTERVAL_MS = 4000;
 const ACTIVE_STATUSES = ["Pending", "Processing"];
 
 export default function Dashboard() {
-  const { email, logout } = useAuth();
+  const { logout } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newestId, setNewestId] = useState(null);
@@ -73,11 +73,9 @@ export default function Dashboard() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <span className="id">IPS18</span>
           <h1>Document Intelligence</h1>
         </div>
         <div className="who">
-          <span>{email}</span>
           <button className="link-btn" onClick={logout}>
             Sign out
           </button>

@@ -43,9 +43,6 @@ export default function Register() {
   return (
     <div className="auth-shell">
       <div className="auth-card">
-        <div className="auth-mark">
-          <span className="id">IPS18</span>
-        </div>
         <h1>Create account</h1>
         <p className="auth-sub">Healthcare Document Processing &amp; Intelligence Platform</p>
 
