@@ -1,8 +1,8 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, Numeric , func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, String, Numeric, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -20,6 +20,7 @@ class Document(Base):
     )
 
     uploaded_by: Mapped[UUID] = mapped_column(
+        ForeignKey("users.user_id"),
         nullable=False,
     )
 
@@ -63,4 +64,9 @@ class Document(Base):
     processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+
+    uploader: Mapped["User"] = relationship(  # noqa: F821
+        "User",
+        back_populates="documents",
     )
