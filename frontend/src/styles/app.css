@@ -200,6 +200,7 @@ main.content {
   box-shadow: var(--shadow-card);
   padding: 24px;
   margin-bottom: 40px;
+<<<<<<< HEAD
   width: 100%;
   box-sizing: border-box;
 }
@@ -208,6 +209,11 @@ main.content {
   display: block;
   width: 100%;
   box-sizing: border-box;
+=======
+}
+
+.dropzone {
+>>>>>>> origin/main
   border: 1.5px dashed var(--line-300);
   border-radius: var(--radius-sm);
   padding: 28px;
