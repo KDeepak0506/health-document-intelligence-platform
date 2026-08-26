@@ -37,6 +37,9 @@ jobs:
           pip install -r requirements.txt
 
       - name: Verify backend imports
+        env:
+          DATABASE_URL: postgresql://ci_user:ci_password@localhost:5432/ci_database
+          SECRET_KEY: ci-test-secret-key
         run: |
           python -c "from app.main import app; print('Backend import successful')"
 
