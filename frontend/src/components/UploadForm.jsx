@@ -41,7 +41,10 @@ export default function UploadForm({ onUploaded, onError }) {
   }
 
   async function handleUpload() {
-    if (!file) return;
+    if (!file) {
+      setError("Please select a file to upload.");
+      return;
+    }
     setUploading(true);
     setError(null);
     try {
@@ -58,14 +61,30 @@ export default function UploadForm({ onUploaded, onError }) {
     }
   }
 
-  return (
-    <div className="upload-card">
-      <div className="section-label">Upload document</div>
+  const getFileExtension = (filename) => {
+    return filename.split(".").pop().toUpperCase();
+  };
 
-      {error && <div className="error-banner">{error}</div>}
+  return (
+    <div className="hp-upload-workspace">
+      <div className="hp-section-header">
+        <h2 className="hp-section-title">Upload Healthcare Document</h2>
+        <span className="hp-dropzone-subtitle" style={{ margin: 0 }}>Max file size: {MAX_SIZE_MB}MB</span>
+      </div>
+
+      {error && (
+        <div className="hp-error-banner" role="alert">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <span>{error}</span>
+        </div>
+      )}
 
       <label
-        className={`dropzone ${dragActive ? "active" : ""}`}
+        className={`hp-dropzone ${dragActive ? "active" : ""}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragActive(true);
@@ -79,28 +98,68 @@ export default function UploadForm({ onUploaded, onError }) {
           accept={ACCEPTED_EXT.join(",")}
           onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
         />
-        <div className="instruction">
-          {dragActive ? "Drop to select" : "Drag a file here, or click to browse"}
+        <div className="hp-upload-cloud-icon">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
         </div>
-        <div className="formats">PDF · JPG · JPEG · PNG — up to {MAX_SIZE_MB}MB</div>
+        <div className="hp-dropzone-title">
+          {dragActive ? "Drop document to select" : "Drag and drop your document here"}
+        </div>
+        <div className="hp-dropzone-subtitle">or click to browse files from your computer</div>
+        
+        <div className="hp-format-pills">
+          <span className="hp-format-pill">PDF</span>
+          <span className="hp-format-pill">JPG</span>
+          <span className="hp-format-pill">JPEG</span>
+          <span className="hp-format-pill">PNG</span>
+        </div>
       </label>
 
       {file && (
-        <div className="selected-file">
-          <span>{file.name} · {(file.size / 1024).toFixed(0)} KB</span>
-          <button onClick={() => setFile(null)} disabled={uploading}>
-            Remove
+        <div className="hp-selected-file-card">
+          <div className="hp-file-details">
+            <div className="hp-file-icon">{getFileExtension(file.name)}</div>
+            <div>
+              <div className="hp-file-name">{file.name}</div>
+              <div className="hp-file-meta">{(file.size / (1024 * 1024)).toFixed(2)} MB • Ready for processing</div>
+            </div>
+          </div>
+          <button
+            className="hp-remove-file-btn"
+            onClick={() => setFile(null)}
+            disabled={uploading}
+            type="button"
+          >
+            Remove file
           </button>
         </div>
       )}
 
-      <div className="upload-actions">
+      <div className="hp-upload-actions">
         <button
-          className="btn-primary"
+          className="hp-btn-primary"
           onClick={handleUpload}
-          disabled={!file || uploading}
+          disabled={uploading}
+          type="button"
         >
-          {uploading ? <span className="spinner" /> : "Upload document"}
+          {uploading ? (
+            <>
+              <span className="hp-spinner" />
+              <span>Uploading &amp; Processing...</span>
+            </>
+          ) : (
+            <>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Upload Document</span>
+            </>
+          )}
         </button>
       </div>
     </div>

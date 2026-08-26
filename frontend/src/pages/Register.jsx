@@ -26,7 +26,6 @@ export default function Register() {
     setLoading(true);
     try {
       await register({ name, email, password, role });
-      // auto-login right after successful registration
       await login({ email, password });
       navigate("/dashboard", { replace: true });
     } catch (err) {
@@ -41,74 +40,131 @@ export default function Register() {
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <h1>Create account</h1>
-        <p className="auth-sub">Healthcare Document Processing &amp; Intelligence Platform</p>
+    <div className="hp-auth-shell">
+      {/* Left side healthcare banner */}
+      <div className="hp-auth-banner">
+        <div className="hp-auth-banner-header">
+          <div className="hp-brand-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          </div>
+          <span className="hp-brand-text" style={{ fontSize: "1.5rem" }}>HealthParse</span>
+        </div>
 
-        {error && <div className="error-banner">{error}</div>}
+        <div className="hp-auth-banner-body">
+          <h2>Create Your HealthParse Account</h2>
+          <p>
+            Join your healthcare organization on the intelligent document processing platform designed for clinical workflows.
+          </p>
 
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="field">
-            <label htmlFor="name">Full name</label>
-            <input
-              id="name"
-              type="text"
-              autoComplete="name"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Dr. Jane Okafor"
-            />
+          <div className="hp-auth-feature-list">
+            <div className="hp-auth-feature-item">
+              <div className="hp-auth-feature-icon">✓</div>
+              <span>Role-tailored clinical access</span>
+            </div>
+            <div className="hp-auth-feature-item">
+              <div className="hp-auth-feature-icon">✓</div>
+              <span>High-capacity document processing</span>
+            </div>
+            <div className="hp-auth-feature-item">
+              <div className="hp-auth-feature-icon">✓</div>
+              <span>Instant validation & audit readiness</span>
+            </div>
           </div>
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="username"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@hospital.org"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="new-password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="role">Role</label>
-            <select
-              id="role"
-              required
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-            >
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button className="btn-primary" type="submit" disabled={loading}>
-            {loading ? <span className="spinner" /> : "Create account"}
-          </button>
-        </form>
+        </div>
 
-        <p className="hint">
-          Already have an account? <Link to="/login">Sign in</Link>
-        </p>
+        <div className="hp-auth-banner-footer">
+          HealthParse Clinical Document Intelligence Platform &copy; {new Date().getFullYear()}
+        </div>
+      </div>
+
+      {/* Right side registration form */}
+      <div className="hp-auth-form-container">
+        <div className="hp-auth-card">
+          <h1>Create account</h1>
+          <p className="hp-auth-subtitle">Register to begin processing clinical documents</p>
+
+          {error && (
+            <div className="hp-error-banner" role="alert">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="hp-field">
+              <label htmlFor="name">Full Name</label>
+              <input
+                id="name"
+                className="hp-input"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Dr. Jane Okafor"
+              />
+            </div>
+            <div className="hp-field">
+              <label htmlFor="email">Work Email</label>
+              <input
+                id="email"
+                className="hp-input"
+                type="email"
+                autoComplete="username"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@hospital.org"
+              />
+            </div>
+            <div className="hp-field">
+              <label htmlFor="password">Password</label>
+              <input
+                id="password"
+                className="hp-input"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+              />
+            </div>
+            <div className="hp-field">
+              <label htmlFor="role">Clinical Role</label>
+              <select
+                id="role"
+                className="hp-select"
+                required
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
+                {ROLES.map((r) => (
+                  <option key={r.value} value={r.value}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button className="hp-btn-primary" type="submit" disabled={loading}>
+              {loading ? <span className="hp-spinner" /> : "Create Account"}
+            </button>
+          </form>
+
+          <p className="hp-hint">
+            Already registered? <Link to="/login">Sign in</Link>
+          </p>
+        </div>
       </div>
     </div>
   );
