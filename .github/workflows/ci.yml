@@ -43,6 +43,9 @@ jobs:
         run: |
           python -c "from app.main import app; print('Backend import successful')"
 
+      - name: Run backend tests
+        run: python -m pytest ../tests -q
+
   frontend:
     name: Frontend CI
 
