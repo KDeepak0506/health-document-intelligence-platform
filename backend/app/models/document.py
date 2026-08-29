@@ -70,3 +70,9 @@ class Document(Base):
         "User",
         back_populates="documents",
     )
+
+    text_record: Mapped["DocumentText | None"] = relationship(  # noqa: F821
+        "DocumentText",
+        back_populates="document",
+        uselist=False,
+    )

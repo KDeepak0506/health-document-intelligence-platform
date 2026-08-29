@@ -5,9 +5,13 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.models.document import Document
+from app.models.document_text import DocumentText
+from app.schemas.document import DocumentProcessingStatus
+from app.services.ocr_service import OCRResult
+
+
 
 from datetime import datetime, timezone
-from app.schemas.document import DocumentProcessingStatus
 
 
 UPLOAD_DIR = Path("uploads/documents")
@@ -134,3 +138,80 @@ def get_document_by_id(
         )
 
     return document
+
+
+def store_ocr_result(
+    db: Session,
+    document_id: UUID,
+    ocr_result: OCRResult,
+) -> DocumentText:
+    document = (
+        db.query(Document)
+        .filter(Document.document_id == document_id)
+        .first()
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Document not found",
+        )
+
+    doc_text = (
+        db.query(DocumentText)
+        .filter(DocumentText.document_id == document_id)
+        .first()
+    )
+
+    if doc_text is None:
+        doc_text = DocumentText(
+            document_id=document_id,
+            raw_text=ocr_result.raw_text,
+            page_count=ocr_result.page_count,
+            confidence=ocr_result.confidence,
+            layout=ocr_result.layout,
+            ocr_engine=ocr_result.ocr_engine,
+            processing_time_ms=ocr_result.processing_time_ms,
+        )
+        db.add(doc_text)
+    else:
+        doc_text.raw_text = ocr_result.raw_text
+        doc_text.page_count = ocr_result.page_count
+        doc_text.confidence = ocr_result.confidence
+        doc_text.layout = ocr_result.layout
+        doc_text.ocr_engine = ocr_result.ocr_engine
+        doc_text.processing_time_ms = ocr_result.processing_time_ms
+
+    document.processing_status = DocumentProcessingStatus.COMPLETED.value
+    document.processed_at = datetime.now(timezone.utc)
+
+    # Explicit branch for native vs OCR confidence score
+    if ocr_result.ocr_engine == "pymupdf-native":
+        document.ocr_quality_score = 1.0
+    else:
+        document.ocr_quality_score = ocr_result.confidence
+
+    db.commit()
+    db.refresh(doc_text)
+    db.refresh(document)
+
+    return doc_text
+
+
+def get_document_text(
+    db: Session,
+    document_id: UUID,
+) -> DocumentText:
+    doc_text = (
+        db.query(DocumentText)
+        .filter(DocumentText.document_id == document_id)
+        .first()
+    )
+
+    if doc_text is None:
+        raise HTTPException(
+            status_code=404,
+            detail="OCR text not found for this document",
+        )
+
+    return doc_text
