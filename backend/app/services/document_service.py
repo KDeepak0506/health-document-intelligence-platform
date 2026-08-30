@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.document import Document
 from app.models.document_text import DocumentText
 from app.schemas.document import DocumentProcessingStatus
-from app.services.ocr_service import OCRResult
+from app.services.ocr_service import OCRResult, extract_text
 
 
 
@@ -74,11 +74,39 @@ def upload_document(
 
     # 6. Store file path in database
     document.file_url = str(file_path)
+    document.processing_status = DocumentProcessingStatus.PROCESSING.value
 
     db.commit()
     db.refresh(document)
 
+    # 7. Run OCR and persist the result
+    try:
+        ocr_result = extract_text(file_path, document.file_type)
+        store_ocr_result(db, document.document_id, ocr_result)
+        db.refresh(document)
+    except Exception as exc:
+        _mark_document_failed(db, document.document_id)
+        raise HTTPException(
+            status_code=500,
+            detail="OCR processing failed",
+        ) from exc
+
     return document
+
+def _mark_document_failed(
+    db: Session,
+    document_id: UUID,
+) -> None:
+    """Set the document's processing status to Failed without raising HTTP errors."""
+    document = (
+        db.query(Document)
+        .filter(Document.document_id == document_id)
+        .first()
+    )
+    if document is not None:
+        document.processing_status = DocumentProcessingStatus.FAILED.value
+        db.commit()
+
 
 def update_document_status(
     db: Session,
