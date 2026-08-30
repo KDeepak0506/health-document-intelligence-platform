@@ -312,7 +312,7 @@ def test_upload_ocr_failure_sets_failed_status(
     )
 
     assert response.status_code == 500
-    assert response.json()["detail"] == "OCR processing failed"
+    assert response.json()["detail"] == "OCR processing failed: RuntimeError: Simulated OCR failure"
 
     # Verify the document record is "Failed", not stuck in "Processing"
     db = database()

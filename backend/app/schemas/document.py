@@ -1,6 +1,7 @@
 from uuid import UUID
 from pydantic import BaseModel
 from enum import Enum
+from datetime import datetime
 
 
 class DocumentProcessingStatus(str, Enum):
@@ -19,3 +20,4 @@ class DocumentResponse(BaseModel):
     file_url: str
     document_type: str | None
     processing_status: DocumentProcessingStatus
+    uploaded_at: datetime

@@ -88,7 +88,7 @@ def upload_document(
         _mark_document_failed(db, document.document_id)
         raise HTTPException(
             status_code=500,
-            detail="OCR processing failed",
+            detail=f"OCR processing failed: {type(exc).__name__}: {exc}",
         ) from exc
 
     return document
@@ -242,4 +242,4 @@ def get_document_text(
             detail="OCR text not found for this document",
         )
 
-    return doc_text
+    return doc_text
