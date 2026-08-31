@@ -17,6 +17,8 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-with-at-least-32-bytes")
 
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
+import app.db.session as db_session_module  # noqa: E402
+import app.services.document_service as doc_service_module  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -38,7 +40,14 @@ def database() -> Generator[sessionmaker[Session], None, None]:
             db.close()
 
     app.dependency_overrides[get_db] = override_get_db
+    orig_session_local = db_session_module.SessionLocal
+    db_session_module.SessionLocal = testing_session
+    doc_service_module.SessionLocal = testing_session
+
     yield testing_session
+
+    db_session_module.SessionLocal = orig_session_local
+    doc_service_module.SessionLocal = orig_session_local
     app.dependency_overrides.clear()
     Base.metadata.drop_all(engine)
     engine.dispose()

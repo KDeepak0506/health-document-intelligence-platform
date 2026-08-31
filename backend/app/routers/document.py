@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user
@@ -32,6 +32,7 @@ router = APIRouter(
     status_code=201,
 )
 def upload_document_endpoint(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     patient_id: UUID | None = None,
     current_user: User = Depends(get_current_user),
@@ -42,6 +43,7 @@ def upload_document_endpoint(
         file=file,
         patient_id=patient_id,
         uploaded_by=current_user.user_id,
+        background_tasks=background_tasks,
     )
 
 @router.get(

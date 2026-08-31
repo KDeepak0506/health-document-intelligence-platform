@@ -39,10 +39,15 @@ def test_upload_document_persists_metadata_and_file(
     document = response.json()
     assert document["file_name"] == "scan.pdf"
     assert document["file_type"] == "application/pdf"
-    assert document["processing_status"] == "Completed"
+    assert document["processing_status"] == "Processing"
     saved_file = Path(document["file_url"])
     assert saved_file == tmp_path / f"{document['document_id']}.pdf"
     assert saved_file.read_bytes() == b"pdf-content"
+
+    # Verify background task finished OCR and updated document status to Completed
+    fetched = client.get(f"/api/v1/documents/{document['document_id']}", headers=auth_headers)
+    assert fetched.status_code == 200
+    assert fetched.json()["processing_status"] == "Completed"
 
 
 def test_upload_rejects_unsupported_file_type(
@@ -110,3 +115,64 @@ def test_missing_document_returns_not_found(
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Document not found"
+
+
+def test_background_task_creates_own_db_session(
+    database,
+    tmp_path: Path,
+    monkeypatch,
+    registered_user: dict,
+) -> None:
+    """Verify that _run_ocr_and_store creates and closes its own DB session cleanly."""
+    from uuid import UUID
+    from app.models.document import Document
+    from app.models.document_text import DocumentText
+
+    db = database()
+    doc_id = None
+    try:
+        user_id = UUID(registered_user["user_id"])
+        doc = Document(
+            uploaded_by=user_id,
+            file_name="bg_test.pdf",
+            file_type="application/pdf",
+            file_url=str(tmp_path / "bg_test.pdf"),
+            processing_status="Processing",
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+        doc_id = doc.document_id
+    finally:
+        db.close()
+
+    mock_result = OCRResult(
+        raw_text="Background session text",
+        page_count=1,
+        confidence=0.99,
+        ocr_engine="pymupdf-native",
+        processing_time_ms=10,
+        layout={"pages": 1, "tables_detected": 0, "page_confidences": [], "word_confidences": None},
+    )
+    monkeypatch.setattr(document_service, "extract_text", lambda fp, ft: mock_result)
+
+    # Invoke _run_ocr_and_store directly without passing a request DB session
+    document_service._run_ocr_and_store(
+        document_id=doc_id,
+        file_path=tmp_path / "bg_test.pdf",
+        file_type="application/pdf",
+    )
+
+    # Verify background task persisted results in DB using its own session
+    check_db = database()
+    try:
+        updated_doc = check_db.query(Document).filter(Document.document_id == doc_id).first()
+        assert updated_doc is not None
+        assert updated_doc.processing_status == "Completed"
+        assert updated_doc.processed_at is not None
+
+        doc_text = check_db.query(DocumentText).filter(DocumentText.document_id == doc_id).first()
+        assert doc_text is not None
+        assert doc_text.raw_text == "Background session text"
+    finally:
+        check_db.close()

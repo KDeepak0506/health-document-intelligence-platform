@@ -1,18 +1,18 @@
+import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import HTTPException, UploadFile
+from fastapi import BackgroundTasks, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from app.db.session import SessionLocal
 from app.models.document import Document
 from app.models.document_text import DocumentText
 from app.schemas.document import DocumentProcessingStatus
 from app.services.ocr_service import OCRResult, extract_text
 
-
-
-from datetime import datetime, timezone
-
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = Path("uploads/documents")
 
@@ -23,11 +23,33 @@ ALLOWED_TYPES = {
 }
 
 
+def _run_ocr_and_store(
+    document_id: UUID,
+    file_path: Path,
+    file_type: str,
+) -> None:
+    """Internal background task to run OCR and store results using a dedicated DB session."""
+    db = SessionLocal()
+    try:
+        ocr_result = extract_text(file_path, file_type)
+        store_ocr_result(db, document_id, ocr_result)
+    except Exception as exc:
+        logger.error(f"Background OCR failed for document {document_id}: {exc}")
+        try:
+            db.rollback()
+            _mark_document_failed(db, document_id)
+        except Exception as inner_exc:
+            logger.error(f"Failed to mark document {document_id} as failed: {inner_exc}")
+    finally:
+        db.close()
+
+
 def upload_document(
     db: Session,
     file: UploadFile,
     patient_id: UUID | None,
     uploaded_by: UUID,
+    background_tasks: BackgroundTasks,
 ) -> Document:
 
     # 1. Validate file type
@@ -72,26 +94,23 @@ def upload_document(
             detail="Failed to save uploaded file",
         )
 
-    # 6. Store file path in database
+    # 6. Store file path in database and set status to Processing
     document.file_url = str(file_path)
     document.processing_status = DocumentProcessingStatus.PROCESSING.value
 
     db.commit()
     db.refresh(document)
 
-    # 7. Run OCR and persist the result
-    try:
-        ocr_result = extract_text(file_path, document.file_type)
-        store_ocr_result(db, document.document_id, ocr_result)
-        db.refresh(document)
-    except Exception as exc:
-        _mark_document_failed(db, document.document_id)
-        raise HTTPException(
-            status_code=500,
-            detail=f"OCR processing failed: {type(exc).__name__}: {exc}",
-        ) from exc
+    # 7. Schedule OCR as a background task
+    background_tasks.add_task(
+        _run_ocr_and_store,
+        document_id=document.document_id,
+        file_path=file_path,
+        file_type=document.file_type,
+    )
 
     return document
+
 
 def _mark_document_failed(
     db: Session,

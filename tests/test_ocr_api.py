@@ -262,8 +262,13 @@ def test_upload_triggers_ocr_and_stores_text(
     )
     document_id = doc["document_id"]
 
-    # Document should be Completed after successful upload+OCR
-    assert doc["processing_status"] == "Completed"
+    # Upload endpoint returns immediately with status Processing
+    assert doc["processing_status"] == "Processing"
+
+    # Verify document status becomes Completed after background OCR task finishes
+    doc_res = client.get(f"/api/v1/documents/{document_id}", headers=auth_headers)
+    assert doc_res.status_code == 200
+    assert doc_res.json()["processing_status"] == "Completed"
 
     # OCR text must be retrievable
     response = client.get(
@@ -295,8 +300,8 @@ def test_upload_ocr_failure_sets_failed_status(
     monkeypatch,
     database: sessionmaker[Session],
 ) -> None:
-    """When OCR raises an exception the upload returns 500 and the document's
-    processing_status is 'Failed' (not left in 'Processing')."""
+    """When OCR raises an exception in the background task, the upload request still
+    returns 201 Created immediately, and the document's processing_status becomes 'Failed'."""
     monkeypatch.setattr(document_service, "UPLOAD_DIR", tmp_path)
 
     def _raise(*args, **kwargs):
@@ -311,10 +316,11 @@ def test_upload_ocr_failure_sets_failed_status(
         files={"file": ("broken.pdf", b"not-a-real-pdf", "application/pdf")},
     )
 
-    assert response.status_code == 500
-    assert response.json()["detail"] == "OCR processing failed: RuntimeError: Simulated OCR failure"
+    # HTTP request succeeds with 201 Created and initial status Processing
+    assert response.status_code == 201
+    assert response.json()["processing_status"] == "Processing"
 
-    # Verify the document record is "Failed", not stuck in "Processing"
+    # Verify background exception handled and document record status updated to "Failed"
     db = database()
     try:
         failed_doc = (
