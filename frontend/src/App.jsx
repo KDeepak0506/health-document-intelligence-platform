@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import DocumentsPage from "./pages/DocumentsPage";
+import DocumentDetailPage from "./pages/DocumentDetailPage";
 import UploadPage from "./pages/UploadPage";
 
 function RootRedirect() {
@@ -39,6 +40,17 @@ export default function App() {
               <ProtectedRoute>
                 <AppLayout>
                   <DocumentsPage />
+                </AppLayout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/documents/:documentId"
+            element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <DocumentDetailPage />
                 </AppLayout>
               </ProtectedRoute>
             }

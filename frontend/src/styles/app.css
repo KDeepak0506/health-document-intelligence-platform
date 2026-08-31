@@ -773,10 +773,66 @@
   background: var(--hp-bg);
 }
 
+.hp-row-link {
+  cursor: pointer;
+}
+
 .hp-file-cell {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.hp-file-cell-link {
+  color: inherit;
+}
+
+.hp-file-cell-link:hover {
+  text-decoration: none;
+}
+
+.hp-file-cell-link:hover .hp-filename-text {
+  color: var(--hp-primary);
+  text-decoration: underline;
+}
+
+/* ── Document Detail Page ───────────────────────────────────── */
+
+.hp-doc-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-6);
+}
+
+.hp-doc-meta-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--hp-text-500);
+  margin-bottom: var(--space-1);
+}
+
+.hp-doc-meta-value {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--hp-text-900);
+}
+
+.hp-ocr-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+  color: var(--hp-text-900);
+  background: var(--hp-surface-2);
+  border: 1px solid var(--hp-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  max-height: 640px;
+  overflow-y: auto;
+  margin: 0;
 }
 
 .hp-doc-type-icon {

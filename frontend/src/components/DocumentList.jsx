@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 const STATUS_CLASS = {
   Pending: "hp-status-pending",
@@ -72,9 +73,13 @@ export default function DocumentList({ documents, loading, newestId }) {
             const statusClass = STATUS_CLASS[doc.processing_status] || "hp-status-pending";
             
             return (
-              <tr key={doc.document_id} style={isNew ? { background: "var(--hp-primary-50)" } : undefined}>
+              <tr
+                key={doc.document_id}
+                className="hp-row-link"
+                style={isNew ? { background: "var(--hp-primary-50)" } : undefined}
+              >
                 <td>
-                  <div className="hp-file-cell">
+                  <Link to={`/documents/${doc.document_id}`} className="hp-file-cell hp-file-cell-link">
                     <div className="hp-doc-type-icon">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -84,7 +89,7 @@ export default function DocumentList({ documents, loading, newestId }) {
                     <span className="hp-filename-text" title={doc.file_name || doc.document_id}>
                       {doc.file_name || doc.document_id}
                     </span>
-                  </div>
+                  </Link>
                 </td>
                 <td>
                   <span style={{ fontSize: "0.8125rem", color: "var(--hp-text-700)" }}>
