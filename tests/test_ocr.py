@@ -247,6 +247,39 @@ def test_get_document_text_missing_raises_404(database: sessionmaker[Session]) -
     finally:
         db.close()
 
+def test_reconstruct_text_from_data_groups_by_line() -> None:
+    """Words at similar vertical positions across two 'columns' stay
+    grouped on the same line instead of interleaving row-by-row."""
+    data = {
+        "text": ["Name:", "John", "DOB:", "1990", "Diagnosis:", "Flu", "Dose:", "5mg"],
+        "left": [20, 90, 280, 340, 20, 130, 280, 340],
+        "top": [20, 20, 22, 21, 80, 80, 81, 80],
+        "conf": [95, 95, 90, 92, 88, 91, 93, 90],
+    }
+    text = ocr_service._reconstruct_text_from_data(data)
+    lines = text.split("\n")
+    assert len(lines) == 2
+    assert lines[0] == "Name: John DOB: 1990"
+    assert lines[1] == "Diagnosis: Flu Dose: 5mg"
+
+
+def test_reconstruct_text_from_data_single_column_order_unchanged() -> None:
+    """Regression check: plain single-column text still comes out in the
+    same reading order (top-to-bottom, left-to-right within a line)."""
+    data = {
+        "text": ["Hospital", "Discharge", "Summary", "Patient:", "Jane", "Doe"],
+        "left": [20, 100, 200, 20, 100, 150],
+        "top": [20, 20, 20, 60, 60, 60],
+        "conf": [95, 95, 95, 95, 95, 95],
+    }
+    text = ocr_service._reconstruct_text_from_data(data)
+    assert text == "Hospital Discharge Summary\nPatient: Jane Doe"
+
+
+def test_reconstruct_text_from_data_empty_or_low_confidence() -> None:
+    data = {"text": ["", "  ", "ok"], "left": [0, 0, 5], "top": [0, 0, 5], "conf": [-1, 50, -1]}
+    assert ocr_service._reconstruct_text_from_data(data) == ""
+
 
 def test_store_ocr_result_updates_existing_record(database: sessionmaker[Session]) -> None:
     db = database()

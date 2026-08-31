@@ -15,6 +15,8 @@ import pytesseract
 
 logger = logging.getLogger(__name__)
 
+LINE_THRESHOLD = 15  # px vertical tolerance for grouping words into the same line; tune if needed
+
 # Discover Tesseract binary on Windows if not already in system PATH
 if not shutil.which("tesseract"):
     for candidate_path in [
@@ -143,14 +145,78 @@ def _preprocess_image(image: np.ndarray) -> np.ndarray:
     return binary
 
 
+def _reconstruct_text_from_data(data: dict) -> str:
+
+    """Reconstruct reading-order text from Tesseract's image_to_data output.
+
+    Groups words into lines by vertical (top) position, then sorts words
+    within each line left-to-right. This works directly off word
+    coordinates rather than Tesseract's internal block/paragraph layout
+    analysis, which avoids the row/column scrambling that
+    pytesseract.image_to_string() can produce on tables and multi-column
+    layouts.
+
+    Known limitation: words that fall in the same horizontal band are
+    merged into one line, so genuine side-by-side columns or table cells
+    at the same vertical height will still be concatenated onto a single
+    line rather than kept in separate cells. True grid/column detection
+    is out of scope for this fix.
+    """
+    
+    words: list[dict[str, Any]] = []
+    for i in range(len(data["text"])):
+        text = data["text"][i].strip()
+        if not text:
+            continue
+        try:
+            conf_val = float(data["conf"][i])
+        except (ValueError, TypeError):
+            continue
+        if conf_val < 0:
+            continue
+        words.append({
+            "text": text,
+            "left": data["left"][i],
+            "top": data["top"][i],
+        })
+
+    if not words:
+        return ""
+
+    words.sort(key=lambda w: w["top"])
+
+    lines: list[list[dict[str, Any]]] = []
+    for word in words:
+        placed = False
+        for line in lines:
+            line_top = sum(w["top"] for w in line) / len(line)
+            if abs(word["top"] - line_top) <= LINE_THRESHOLD:
+                line.append(word)
+                placed = True
+                break
+        if not placed:
+            lines.append([word])
+
+    lines.sort(key=lambda line: sum(w["top"] for w in line) / len(line))
+
+    line_texts = []
+    for line in lines:
+        line.sort(key=lambda w: w["left"])
+        line_texts.append(" ".join(w["text"] for w in line))
+
+    return "\n".join(line_texts)
+
+
+
+
 def _collect_page_data(
     processed_image: np.ndarray,
     page_num: int,
 ) -> tuple[str, float, list[dict[str, Any]]]:
-    """Run Tesseract OCR on a processed image page, extracting full text,
-    normalized page confidence (0.0 to 1.0), and page-tagged word confidences.
+    """Run Tesseract OCR on a processed image page, extracting full text
+    (reconstructed in reading order from word coordinates), normalized page
+    confidence (0.0 to 1.0), and page-tagged word confidences.
     """
-    page_text = pytesseract.image_to_string(processed_image).strip()
     data = pytesseract.image_to_data(processed_image, output_type=pytesseract.Output.DICT)
 
     word_confidences: list[dict[str, Any]] = []
@@ -175,6 +241,7 @@ def _collect_page_data(
             })
             conf_values.append(normalized_conf)
 
+    page_text = _reconstruct_text_from_data(data)
     page_confidence = round(sum(conf_values) / len(conf_values), 4) if conf_values else 0.0
     return page_text, page_confidence, word_confidences
 
