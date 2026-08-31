@@ -23,3 +23,16 @@ export async function getDocumentStatus(documentId) {
   const { data } = await client.get(`/documents/${documentId}`);
   return { document_id: data.document_id, status: data.processing_status };
 }
+
+// GET /api/v1/documents/{document_id} — full document record.
+export async function getDocument(documentId) {
+  const { data } = await client.get(`/documents/${documentId}`);
+  return data; // DocumentResponse
+}
+
+// GET /api/v1/documents/{document_id}/text — stored OCR text + metadata.
+// 404s while OCR hasn't produced a record yet (e.g. still Pending/Processing).
+export async function getDocumentText(documentId) {
+  const { data } = await client.get(`/documents/${documentId}/text`);
+  return data; // DocumentTextResponse
+}
