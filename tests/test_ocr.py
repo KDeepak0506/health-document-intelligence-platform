@@ -14,7 +14,13 @@ from app.models.document import Document
 from app.models.user import User
 from app.services import ocr_service
 from app.services.document_service import get_document_text, store_ocr_result
-from app.services.ocr_service import OCRResult, extract_text, _deskew_fine
+from app.services.ocr_service import (
+    OCRResult,
+    extract_text,
+    _deskew_fine,
+    _extract_words_from_data,
+    _extract_ocr_text_from_pdf,
+)
 
 
 def _is_tesseract_available() -> bool:
@@ -45,9 +51,16 @@ def test_ocr_on_native_pdf(tmp_path: Path) -> None:
     assert "Lisinopril 10mg daily" in result.raw_text
     assert result.layout is not None
     assert result.layout["pages"] == 1
-    assert result.layout["tables_detected"] == 0
+    assert "tables_detected" not in result.layout  # never claim table detection we don't do
     assert result.layout["page_confidences"] == [{"page": 1, "confidence": 1.0}]
-    assert result.layout["word_confidences"] is None
+    # Native PDFs extract text directly via PyMuPDF, not Tesseract, so there
+    # are no per-word bounding boxes on this path -- words is an empty list,
+    # not None, since layout.words must always exist per the schema.
+    assert result.layout["words"] == []
+    assert len(result.layout["page_dimensions"]) == 1
+    assert result.layout["page_dimensions"][0]["page"] == 1
+    assert result.layout["page_dimensions"][0]["width"] == 595
+    assert result.layout["page_dimensions"][0]["height"] == 842
 
 
 def test_store_ocr_result_native_pdf(database: sessionmaker[Session]) -> None:
@@ -220,9 +233,9 @@ def test_tesseract_ocr_on_image(tmp_path: Path) -> None:
     assert result.layout is not None
     assert len(result.layout["page_confidences"]) == 1
     assert result.layout["page_confidences"][0]["page"] == 1
-    assert len(result.layout["word_confidences"]) > 0
-    assert result.layout["word_confidences"][0]["page"] == 1
-    assert 0.0 <= result.layout["word_confidences"][0]["confidence"] <= 1.0
+    assert len(result.layout["words"]) > 0
+    assert result.layout["words"][0]["page"] == 1
+    assert 0.0 <= result.layout["words"][0]["confidence"] <= 1.0
 
 
 def test_preprocessing_pipeline_produces_binary_image() -> None:
@@ -326,3 +339,149 @@ def test_store_ocr_result_updates_existing_record(database: sessionmaker[Session
     finally:
         db.close()
 
+
+# ---------------------------------------------------------------------------
+# Layout metadata preservation (bbox + block/paragraph/line/word hierarchy)
+# ---------------------------------------------------------------------------
+
+def test_extract_words_from_data_includes_bbox_and_hierarchy() -> None:
+    """Every retained word must carry its bounding box and Tesseract's
+    block/paragraph/line/word hierarchy, in addition to text + confidence.
+    Pure logic test -- does not require the Tesseract binary."""
+    data = {
+        "text": ["Medical", "Record"],
+        "conf": ["87", "91"],
+        "left": [120, 200],
+        "top": [185, 185],
+        "width": [72, 65],
+        "height": [21, 21],
+        "block_num": [2, 2],
+        "par_num": [1, 1],
+        "line_num": [3, 3],
+        "word_num": [4, 5],
+    }
+
+    words = _extract_words_from_data(data, page_num=1)
+
+    assert len(words) == 2
+    first = words[0]
+    assert first["page"] == 1
+    assert first["text"] == "Medical"
+    assert first["confidence"] == pytest.approx(0.87)
+    assert first["bbox"] == {"x": 120, "y": 185, "width": 72, "height": 21}
+    assert first["block_num"] == 2
+    assert first["paragraph_num"] == 1
+    assert first["line_num"] == 3
+    assert first["word_num"] == 4
+    # bbox coordinates must be plain ints, not numpy/str types
+    assert all(isinstance(v, int) for v in first["bbox"].values())
+
+
+def test_extract_words_from_data_filters_empty_and_low_confidence() -> None:
+    """Blank text and negative-confidence entries (Tesseract's marker for
+    non-word detections, e.g. block/line-level rows) must not produce
+    fake words in the layout output."""
+    data = {
+        "text": ["", "  ", "Glucose:", "110"],
+        "conf": ["-1", "-1", "95", "-1"],
+        "left": [0, 0, 50, 130],
+        "top": [0, 0, 40, 40],
+        "width": [0, 0, 60, 30],
+        "height": [0, 0, 18, 18],
+        "block_num": [1, 1, 1, 1],
+        "par_num": [1, 1, 1, 1],
+        "line_num": [1, 1, 1, 1],
+        "word_num": [1, 2, 3, 4],
+    }
+
+    words = _extract_words_from_data(data, page_num=1)
+
+    assert len(words) == 1
+    assert words[0]["text"] == "Glucose:"
+
+
+@pytest.mark.skipif(not _is_tesseract_available(), reason="Tesseract OCR binary not found on system")
+def test_ocr_layout_word_metadata_on_image(tmp_path: Path) -> None:
+    """Full integration: real Tesseract output must populate page_dimensions
+    matching the actual processed image, and every word must carry a valid
+    bbox within those dimensions plus normalized confidence."""
+    img_path = tmp_path / "test_rx_layout.png"
+    img = Image.new("RGB", (600, 200), color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.text((30, 80), "Metformin 500mg daily", fill=(0, 0, 0))
+    img.save(img_path)
+
+    result = extract_text(img_path, "image/png")
+
+    assert result.layout is not None
+    assert result.layout["pages"] == 1
+    assert "tables_detected" not in result.layout
+
+    dims = result.layout["page_dimensions"]
+    assert len(dims) == 1
+    assert dims[0]["page"] == 1
+    assert dims[0]["width"] == 600
+    assert dims[0]["height"] == 200
+
+    words = result.layout["words"]
+    assert len(words) > 0
+    for word in words:
+        assert word["page"] == 1
+        assert isinstance(word["text"], str) and word["text"]
+        assert 0.0 <= word["confidence"] <= 1.0
+
+        bbox = word["bbox"]
+        assert bbox["x"] >= 0
+        assert bbox["y"] >= 0
+        assert bbox["width"] >= 0
+        assert bbox["height"] >= 0
+        assert bbox["x"] + bbox["width"] <= dims[0]["width"]
+        assert bbox["y"] + bbox["height"] <= dims[0]["height"]
+
+        for key in ("block_num", "paragraph_num", "line_num", "word_num"):
+            assert key in word
+
+
+@pytest.mark.skipif(not _is_tesseract_available(), reason="Tesseract OCR binary not found on system")
+def test_ocr_layout_multipage_pdf_tracks_page_per_word(tmp_path: Path) -> None:
+    """Multi-page scanned PDFs: each page gets its own dimensions, and every
+    word is tagged with the correct page number."""
+    doc = fitz.open()
+    for i, text in enumerate(["Page One Content", "Page Two Content"]):
+        page = doc.new_page(width=400, height=300)
+        page_img = Image.new("RGB", (400, 300), color=(255, 255, 255))
+        draw = ImageDraw.Draw(page_img)
+        draw.text((30, 130), text, fill=(0, 0, 0))
+        img_path = tmp_path / f"page_{i}.png"
+        page_img.save(img_path)
+        page.insert_image(fitz.Rect(0, 0, 400, 300), filename=str(img_path))
+
+    try:
+        result = _extract_ocr_text_from_pdf(tmp_path / "scanned.pdf", doc)
+    finally:
+        doc.close()
+
+    assert result.page_count == 2
+    assert result.layout["pages"] == 2
+
+    dims = result.layout["page_dimensions"]
+    assert {d["page"] for d in dims} == {1, 2}
+
+    words = result.layout["words"]
+    assert len(words) > 0
+    assert {w["page"] for w in words} == {1, 2}
+
+
+@pytest.mark.skipif(not _is_tesseract_available(), reason="Tesseract OCR binary not found on system")
+def test_ocr_empty_result_handled_gracefully(tmp_path: Path) -> None:
+    """A blank image with no recognizable text must not crash image_to_data()
+    handling -- words should be an empty list, not raise."""
+    img_path = tmp_path / "blank.png"
+    img = Image.new("RGB", (300, 150), color=(255, 255, 255))
+    img.save(img_path)
+
+    result = extract_text(img_path, "image/png")
+
+    assert result.raw_text == ""
+    assert result.layout["words"] == []
+    assert result.layout["page_confidences"] == [{"page": 1, "confidence": 0.0}]

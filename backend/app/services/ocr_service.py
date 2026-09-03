@@ -209,41 +209,79 @@ def _reconstruct_text_from_data(data: dict) -> str:
 
 
 
+def _extract_words_from_data(data: dict, page_num: int) -> list[dict[str, Any]]:
+    """Build word-level layout records from pytesseract.image_to_data() output.
+
+    For every recognized word, preserves the spatial bounding box (left, top,
+    width, height -> bbox.x/y/width/height), the normalized confidence, and
+    Tesseract's block/paragraph/line/word hierarchy (block_num, par_num,
+    line_num, word_num). This is the spatial metadata consumed by M3
+    (classification) and later M4/M8 -- M2 itself does not interpret it.
+
+    Entries with empty text or invalid/negative confidence are filtered out;
+    no synthetic words are created for blank detections.
+    """
+    words: list[dict[str, Any]] = []
+
+    for i in range(len(data["text"])):
+        text = data["text"][i].strip()
+        if not text:
+            continue
+
+        try:
+            conf_val = float(data["conf"][i])
+        except (ValueError, TypeError):
+            continue
+        if conf_val < 0:
+            continue
+
+        words.append({
+            "page": page_num,
+            "text": text,
+            # Normalize 0-100 Tesseract scale to 0.0-1.0 scale
+            "confidence": round(conf_val / 100.0, 4),
+            "bbox": {
+                "x": int(data["left"][i]),
+                "y": int(data["top"][i]),
+                "width": int(data["width"][i]),
+                "height": int(data["height"][i]),
+            },
+            "block_num": int(data["block_num"][i]),
+            "paragraph_num": int(data["par_num"][i]),
+            "line_num": int(data["line_num"][i]),
+            "word_num": int(data["word_num"][i]),
+        })
+
+    return words
+
+
 def _collect_page_data(
     processed_image: np.ndarray,
     page_num: int,
-) -> tuple[str, float, list[dict[str, Any]]]:
-    """Run Tesseract OCR on a processed image page, extracting full text
-    (reconstructed in reading order from word coordinates), normalized page
-    confidence (0.0 to 1.0), and page-tagged word confidences.
+) -> tuple[str, float, list[dict[str, Any]], dict[str, Any]]:
+    """Run Tesseract OCR on a processed image page.
+
+    Returns:
+        page_text: full text reconstructed in reading order from word
+            coordinates (unchanged behavior -- see _reconstruct_text_from_data).
+        page_confidence: normalized (0.0-1.0) average confidence for the page.
+        words: per-word layout records (text, confidence, bbox, and
+            block/paragraph/line/word hierarchy) -- see _extract_words_from_data.
+        page_dimension: {"page": page_num, "width": ..., "height": ...} of the
+            exact image passed into Tesseract (post-preprocessing), in pixels.
     """
     data = pytesseract.image_to_data(processed_image, output_type=pytesseract.Output.DICT)
 
-    word_confidences: list[dict[str, Any]] = []
-    conf_values: list[float] = []
-
-    for i in range(len(data["text"])):
-        word = data["text"][i].strip()
-        conf_str = data["conf"][i]
-
-        try:
-            conf_val = float(conf_str)
-        except (ValueError, TypeError):
-            continue
-
-        if word and conf_val >= 0:
-            # Normalize 0-100 Tesseract scale to 0.0-1.0 scale
-            normalized_conf = round(conf_val / 100.0, 4)
-            word_confidences.append({
-                "text": word,
-                "confidence": normalized_conf,
-                "page": page_num,
-            })
-            conf_values.append(normalized_conf)
+    words = _extract_words_from_data(data, page_num)
+    conf_values = [w["confidence"] for w in words]
+    page_confidence = round(sum(conf_values) / len(conf_values), 4) if conf_values else 0.0
 
     page_text = _reconstruct_text_from_data(data)
-    page_confidence = round(sum(conf_values) / len(conf_values), 4) if conf_values else 0.0
-    return page_text, page_confidence, word_confidences
+
+    height, width = processed_image.shape[:2]
+    page_dimension = {"page": page_num, "width": int(width), "height": int(height)}
+
+    return page_text, page_confidence, words, page_dimension
 
 
 def _extract_native_pdf_text(file_path: Path, doc: fitz.Document) -> OCRResult:
@@ -252,6 +290,7 @@ def _extract_native_pdf_text(file_path: Path, doc: fitz.Document) -> OCRResult:
     page_texts: list[str] = []
     page_count = len(doc)
     page_confidences: list[dict[str, Any]] = []
+    page_dimensions: list[dict[str, Any]] = []
 
     for idx, page in enumerate(doc):
         text = page.get_text().strip()
@@ -260,15 +299,23 @@ def _extract_native_pdf_text(file_path: Path, doc: fitz.Document) -> OCRResult:
             "page": idx + 1,
             "confidence": 1.0,
         })
+        rect = page.rect
+        page_dimensions.append({
+            "page": idx + 1,
+            "width": int(round(rect.width)),
+            "height": int(round(rect.height)),
+        })
 
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
     raw_text = "\n\n".join(t for t in page_texts if t)
 
     layout = {
         "pages": page_count,
-        "tables_detected": 0,
+        "page_dimensions": page_dimensions,
         "page_confidences": page_confidences,
-        "word_confidences": None,
+        # Native PDFs use direct text extraction (PyMuPDF), not Tesseract OCR,
+        # so there is no per-word bounding-box data to preserve on this path.
+        "words": [],
     }
 
     return OCRResult(
@@ -286,7 +333,8 @@ def _extract_ocr_text_from_pdf(file_path: Path, doc: fitz.Document) -> OCRResult
     start_time = time.perf_counter()
     page_texts: list[str] = []
     page_confidences: list[dict[str, Any]] = []
-    all_word_confidences: list[dict[str, Any]] = []
+    page_dimensions: list[dict[str, Any]] = []
+    all_words: list[dict[str, Any]] = []
     page_count = len(doc)
 
     for idx, page in enumerate(doc):
@@ -302,26 +350,27 @@ def _extract_ocr_text_from_pdf(file_path: Path, doc: fitz.Document) -> OCRResult
             img_bgr = img_array
 
         processed = _preprocess_image(img_bgr)
-        text, page_conf, word_confs = _collect_page_data(processed, page_num=page_num)
+        text, page_conf, words, page_dim = _collect_page_data(processed, page_num=page_num)
 
         page_texts.append(text)
         page_confidences.append({
             "page": page_num,
             "confidence": page_conf,
         })
-        all_word_confidences.extend(word_confs)
+        page_dimensions.append(page_dim)
+        all_words.extend(words)
 
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
     raw_text = "\n\n".join(t for t in page_texts if t)
 
-    all_confs = [w["confidence"] for w in all_word_confidences]
+    all_confs = [w["confidence"] for w in all_words]
     overall_confidence = round(sum(all_confs) / len(all_confs), 4) if all_confs else 0.0
 
     layout = {
         "pages": page_count,
-        "tables_detected": 0,
+        "page_dimensions": page_dimensions,
         "page_confidences": page_confidences,
-        "word_confidences": all_word_confidences,
+        "words": all_words,
     }
 
     return OCRResult(
@@ -343,15 +392,15 @@ def _extract_ocr_text_from_image(file_path: Path) -> OCRResult:
         image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
 
     processed = _preprocess_image(image)
-    text, page_conf, word_confs = _collect_page_data(processed, page_num=1)
+    text, page_conf, words, page_dim = _collect_page_data(processed, page_num=1)
 
     elapsed_ms = int((time.perf_counter() - start_time) * 1000)
 
     layout = {
         "pages": 1,
-        "tables_detected": 0,
+        "page_dimensions": [page_dim],
         "page_confidences": [{"page": 1, "confidence": page_conf}],
-        "word_confidences": word_confs,
+        "words": words,
     }
 
     return OCRResult(
